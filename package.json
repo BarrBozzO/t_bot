@@ -7,6 +7,7 @@
     "@dydxprotocol/v3-client": "^1.8.2",
     "axios": "^0.27.2",
     "dotenv": "^16.0.0",
+    "node-schedule": "^2.1.0",
     "telegraf": "^4.7.0"
   }
 }

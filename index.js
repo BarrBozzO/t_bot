@@ -1,72 +1,86 @@
-const { Telegraf } = require("telegraf");
+const { Telegraf, Markup } = require("telegraf");
+const schedule = require("node-schedule");
 const axios = require("axios");
-const { Markup } = require("telegraf/typings/markup");
 require("dotenv").config();
-
-/// https://telegrambots.github.io/book/1/quickstart.html
+// https://telegrafjs.org/#/?id=installation
+// https://telegrambots.github.io/book/1/quickstart.html
 // https://github.com/RealPeha/telegram-keyboard
 // https://github.com/telegraf/telegraf/blob/v4/docs/examples/keyboard-bot.js
 
-const currency = {
-  usd: "usd",
-  rub: "rub",
-  eur: "eur",
-};
-
-let machine = {};
+let machine = {}; // session ?? https://github.com/telegraf/telegraf/blob/v4/docs/examples/session-bot.ts
+// https://www.digitalocean.com/community/tutorials/how-to-build-a-telegram-quotes-generator-bot-with-node-js-telegraf-jimp-and-pexels good tutorial
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
+bot.use((ctx, next) => {
+  ctx.state.role = "wwww";
+  return next();
+});
+
 // on "start"
-bot.start((ctx) =>
+bot.start((ctx) => {
+  ctx.telegram.setMyCommands([
+    {
+      command: "rate",
+      description: "Get exchange rate",
+    },
+    {
+      command: "help",
+      description: "Get help from finance bot!",
+    },
+    {
+      command: "help",
+      description: "Get help from finance bot!",
+    },
+  ]);
   ctx.reply(
     "Welcome! It is a crypto-tracker bot. Please, select fiat currency in which you want to get current coin price."
-  )
-);
+  );
+});
 
 // on "help"
-bot.help((ctx) => ctx.reply("Send me a sticker"));
+bot.help((ctx) => {
+  delete machine[ctx.from.id];
+  ctx.reply("Finance bot is intent to help you with ");
+});
 bot.command("track", (ctx) => ctx.reply("Hello"));
 
 bot.command("rate", (ctx) => {
   ctx.reply(
-    "Please, select coin token or type it yourself",
-    Markup.keyboard([
-      ["🔍 Search", "😎 Popular"], // Row1 with 2 buttons
-      ["☸ Setting", "📞 Feedback"], // Row2 with 2 buttons
-      ["📢 Ads", "⭐️ Rate us", "👥 Share"], // Row3 with 3 buttons
-    ])
+    "Please, select coin or send it's token",
+    Markup.keyboard([["BTC", "ETH"]])
       .oneTime()
       .resize()
   );
-  machine[ctx.from.id] = [];
+  machine[ctx.from.id] = []; // start sequence
 });
 bot.on("message", async (ctx) => {
+  console.log(ctx.state.role);
   try {
     const state = machine[ctx.from.id];
 
     if (!state) {
-      // return prev. message?
-      throw new Error("");
+      // if there is no started sequence, then do nothing
+      return;
     }
 
-    const text = ctx.message.text.toLowerCase();
+    const text = ctx.message.text.toLowerCase(); // get message text
     if (state.length === 0) {
-      // crypto coin
+      // first step is to get crypto coin
       state.push(text);
-      ctx.reply("please, select fiat currency or type it yourself", {
-        reply_markup: {
-          resize_keyboard: true,
-          keyboard: [["EUR", "USD"]],
-        },
-      });
+      ctx.reply(
+        "please, select fiat currency or type it yourself",
+        Markup.keyboard([["EUR", "USD"]])
+          .oneTime()
+          .resize()
+      );
     } else if (state.length === 1) {
-      // fiat
+      // step 2 - get fiat currency
       state.push(text);
-      ctx.reply("Checking cryptocurrency exchanges...", {
-        reply_markup: {
-          hide_keyboard: true,
-        },
-      });
+      ctx.reply(
+        "Checking cryptocurrency exchanges...",
+        Markup.removeKeyboard()
+      );
 
       const response = await axios.get(
         `https://rest.coinapi.io/v1/exchangerate/${state[0].toUpperCase()}/${state[1].toUpperCase()}`,
@@ -83,6 +97,7 @@ bot.on("message", async (ctx) => {
       } else {
         throw new Error("wd");
       }
+      delete machine[ctx.from.id];
     }
   } catch (error) {
     delete machine[ctx.from.id];
@@ -90,12 +105,14 @@ bot.on("message", async (ctx) => {
   }
 });
 
-// bot.on("sticker", (ctx) => ctx.reply("👍"))s;
-// bot.hears("track");
-
 // launch
 bot.launch();
 
 // Enable graceful stop
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+// set schedule job
+const job = schedule.scheduleJob("1 * * * *", function () {
+  Telegraf.reply("tracked");
+});
