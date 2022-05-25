@@ -1,6 +1,6 @@
-const { Telegraf, Markup, session } = require("telegraf");
+import { Telegraf, Markup, session, Context } from "telegraf";
 const schedule = require("node-schedule");
-const axios = require("axios");
+import axios from "axios";
 require("dotenv").config();
 // https://telegrafjs.org/#/?id=installation
 // https://telegrambots.github.io/book/1/quickstart.html
@@ -10,7 +10,17 @@ require("dotenv").config();
 // session ?? https://github.com/telegraf/telegraf/blob/v4/docs/examples/session-bot.ts
 // https://www.digitalocean.com/community/tutorials/how-to-build-a-telegram-quotes-generator-bot-with-node-js-telegraf-jimp-and-pexels good tutorial
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+interface SessionData {
+  from: string | null;
+  to: string | null;
+}
+
+// Define your own context type
+interface MyContext extends Context {
+  session?: SessionData | null;
+}
+
+const bot = new Telegraf<MyContext>(process.env.BOT_TOKEN);
 bot.use(session());
 
 // on "start"
@@ -55,7 +65,7 @@ bot.command("rate", (ctx) => {
 });
 bot.on("message", async (ctx) => {
   try {
-    if (!ctx.session) {
+    if (!ctx.session || !("text" in ctx.message)) {
       // if there is no started sequence, then do nothing
       return;
     }
