@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require("telegraf");
+const { Telegraf, Markup, session } = require("telegraf");
 const schedule = require("node-schedule");
 const axios = require("axios");
 require("dotenv").config();
@@ -7,15 +7,11 @@ require("dotenv").config();
 // https://github.com/RealPeha/telegram-keyboard
 // https://github.com/telegraf/telegraf/blob/v4/docs/examples/keyboard-bot.js
 
-let machine = {}; // session ?? https://github.com/telegraf/telegraf/blob/v4/docs/examples/session-bot.ts
+// session ?? https://github.com/telegraf/telegraf/blob/v4/docs/examples/session-bot.ts
 // https://www.digitalocean.com/community/tutorials/how-to-build-a-telegram-quotes-generator-bot-with-node-js-telegraf-jimp-and-pexels good tutorial
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-
-bot.use((ctx, next) => {
-  ctx.state.role = "wwww";
-  return next();
-});
+bot.use(session());
 
 // on "start"
 bot.start((ctx) => {
@@ -40,7 +36,7 @@ bot.start((ctx) => {
 
 // on "help"
 bot.help((ctx) => {
-  delete machine[ctx.from.id];
+  ctx.session = null;
   ctx.reply("Finance bot is intent to help you with ");
 });
 bot.command("track", (ctx) => ctx.reply("Hello"));
@@ -52,38 +48,37 @@ bot.command("rate", (ctx) => {
       .oneTime()
       .resize()
   );
-  machine[ctx.from.id] = []; // start sequence
+  ctx.session = {
+    from: null,
+    to: null,
+  }; // start sequence
 });
 bot.on("message", async (ctx) => {
-  console.log(ctx.state.role);
   try {
-    const state = machine[ctx.from.id];
-
-    if (!state) {
+    if (!ctx.session) {
       // if there is no started sequence, then do nothing
       return;
     }
 
     const text = ctx.message.text.toLowerCase(); // get message text
-    if (state.length === 0) {
-      // first step is to get crypto coin
-      state.push(text);
+    if (!ctx.session.from) {
       ctx.reply(
         "please, select fiat currency or type it yourself",
         Markup.keyboard([["EUR", "USD"]])
           .oneTime()
           .resize()
       );
-    } else if (state.length === 1) {
+      ctx.session.from = text;
+    } else if (!ctx.session.to) {
       // step 2 - get fiat currency
-      state.push(text);
+      ctx.session.to = text;
       ctx.reply(
         "Checking cryptocurrency exchanges...",
         Markup.removeKeyboard()
       );
 
       const response = await axios.get(
-        `https://rest.coinapi.io/v1/exchangerate/${state[0].toUpperCase()}/${state[1].toUpperCase()}`,
+        `https://rest.coinapi.io/v1/exchangerate/${ctx.session.from.toUpperCase()}/${ctx.session.to.toUpperCase()}`,
         {
           headers: {
             "X-CoinAPI-Key": process.env.API_KEY,
@@ -92,15 +87,17 @@ bot.on("message", async (ctx) => {
       );
       if (response.status === 200) {
         ctx.reply(
-          `1 ${state[0]} ➡️ ${response.data.rate.toFixed(2)} ${state[1]}`
+          `1 ${ctx.session.from} ➡️ ${response.data.rate.toFixed(2)} ${
+            ctx.session.to
+          }`
         );
       } else {
         throw new Error("wd");
       }
-      delete machine[ctx.from.id];
+      ctx.session = null;
     }
   } catch (error) {
-    delete machine[ctx.from.id];
+    ctx.session = null;
     ctx.reply("Ooops! Something went wrong.");
   }
 });
